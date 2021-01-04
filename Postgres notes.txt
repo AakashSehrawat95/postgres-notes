@@ -1,0 +1,273 @@
+Using psql To Connect To Postgres (Connecting With psql)
+psql -p 5432 -h localhost -d northwind -U postgres
+
+--------------------------------------------------------------------------------
+Subqueries (Subquery Using ANY and ALL)
+--------------------------------------------------------------------------------
+SELECT DISTINCT companyname
+FROM customers
+JOIN orders USING(customerid)
+NATURAL JOIN order_details as od
+WHERE od.unitprice*quantity > ALL
+(SELECT AVG(od.unitprice*quantity)
+FROM order_details as od
+NATURAL JOIN orders
+GROUP BY orders.customerid);
+
+SELECT companyname
+FROM suppliers
+WHERE supplierid= ANY (SELECT products.supplierid from order_details
+JOIN products USING(productid)
+WHERE products.supplierid=suppliers.supplierid
+AND order_details.quantity = 1)
+
+----------------------------------------------------------------------------------------------------
+Subqueries (IN Using Subquery)
+----------------------------------------------------------------------------------------------------
+SELECT companyname
+FROM suppliers as s
+WHERE s.city in (SELECT city from customers)
+
+----------------------------------------------------------------------------------------------------
+Modifying Data In Tables: INSERT, UPDATE and DELETE (INSERT INTO)
+----------------------------------------------------------------------------------------------------
+INSERT INTO order_details
+(orderid, productid, unitprice, quantity, discount)
+VALUES (11078, 11, 14, 20, 0);
+
+----------------------------------------------------------------------------------------------------
+Modifying Data In Tables: INSERT, UPDATE and DELETE (UPDATE)
+----------------------------------------------------------------------------------------------------
+UPDATE order_details
+SET quantity=40, discount=.05
+WHERE orderid=11078
+
+----------------------------------------------------------------------------------------------------
+Modifying Data In Tables: INSERT, UPDATE and DELETE (DELETE)
+----------------------------------------------------------------------------------------------------
+DELETE FROM customer
+WHERE orderid = 11078
+
+----------------------------------------------------------------------------------------------------
+Modifying Data In Tables: INSERT, UPDATE and DELETE (Returning Data From Update, Delete, and Insert)
+----------------------------------------------------------------------------------------------------
+UPDATE order_details
+SET quantity = quantity*2
+WHERE orderid = 10248 and productid = 11
+RETURNING quantity as new_quantity
+
+----------------------------------------------------------------------------------------------------
+Indexes and Performance Tuning (CREATE INDEX)
+----------------------------------------------------------------------------------------------------
+CREATE INDEX customer_order_id_index
+ON orders(customerid, orderid);
+
+----------------------------------------------------------------------------------------------------
+Indexes and Performance Tuning (DROP INDEX)
+----------------------------------------------------------------------------------------------------
+DROP INDEX idx_orders_customerid_orderid;
+
+----------------------------------------------------------------------------------------------------
+Indexes and Performance Tuning (How Is Query Plan Cost Calculated)
+----------------------------------------------------------------------------------------------------
+Number of relation pages *  seq_page_cost
++
+Number of rows *  cpu_tuple_cost
++
+Number of rows * cpu_operator_cost
+
+----------------------------------------------------------------------------------------------------
+Indexes and Performance Tuning (Expression Indexes)
+----------------------------------------------------------------------------------------------------
+CREATE INDEX idx_person_fullname
+ON person.person ( (firstname || ' ' || lastname) );
+
+----------------------------------------------------------------------------------------------------
+Creating and Modifying Tables (CREATE TABLE)
+----------------------------------------------------------------------------------------------------
+CREATE TABLE returns (
+returnid serial,
+customerid char(5),
+date_returned timestamp,
+productid int,
+quantity smallint,
+orderid int
+)
+
+----------------------------------------------------------------------------------------------------
+Creating and Modifying Tables (ALTER TABLE - Part One)
+----------------------------------------------------------------------------------------------------
+ALTERTABLE returns
+RENAME returndate TO return_date;
+
+ALTERTABLE returns
+RENAME TO bad_orders;
+
+----------------------------------------------------------------------------------------------------
+Creating and Modifying Tables (ALTER TABLE - Part Two)
+----------------------------------------------------------------------------------------------------
+ALTER TABLE bad_orders
+ALTER COLUMN quantity SET DATA TYPE int;
+
+----------------------------------------------------------------------------------------------------
+Creating and Modifying Tables (ALTER TABLE - Part Two)
+----------------------------------------------------------------------------------------------------
+ALTER TABLE bad_orders
+ADD COLUMN reason text;
+
+ALTER TABLE bad_orders
+DROP COLUMN reason;
+
+----------------------------------------------------------------------------------------------------
+Creating and Modifying Tables (DROP TABLE)
+----------------------------------------------------------------------------------------------------
+DROP TABLE bad_orders;
+
+----------------------------------------------------------------------------------------------------
+Table Constraints (NOT NULL Constraint)
+----------------------------------------------------------------------------------------------------
+CREATE TABLE pets
+(
+petid int UNIQUE,
+name varchar(25) NOT NULL
+)
+
+ALTER TABLE shippers
+ADD CONSTRAINT companyname_shippers UNIQUE(companyname)
+
+----------------------------------------------------------------------------------------------------
+Table Constraints (NOT NULL Constraint)
+----------------------------------------------------------------------------------------------------
+DROP TABLE practices;
+CREATE TABLE practices
+(
+practiceid integer NOT NULL,
+practice_field varchar(50) NOT NULL
+)
+
+ALTER TABLE employees
+ALTER COLUMN lastname SET NOT NULL;
+
+----------------------------------------------------------------------------------------------------
+Table Constraints (UNIQUE Constraint)
+----------------------------------------------------------------------------------------------------
+DROP TABLE pets;
+
+CREATE TABLE pets (
+petid int PRIMARY KEY,
+name varchar(25) NOT NULL
+);
+
+//Delete primary key
+ALTER TABLE pets
+DROP CONSTRAINT pets_pkey
+
+//ALTER TABLE add primary key
+ALTER TABLE pets
+ADD CONSTRAINT PRIMARY KEY (petid)
+
+
+----------------------------------------------------------------------------------------------------
+Table Constraints (PRIMARY KEY Constraint)
+----------------------------------------------------------------------------------------------------
+DROP TABLE pets;
+
+CREATE TABLE pets (
+petid int PRIMARY KEY,
+name varchar(25) NOT NULL,
+FOREIGN KEY (customerid) REFERENCES customers (customerid)
+);
+
+//ADD and DROP foreign keys
+ALTER TABLE pets
+DROP CONSTRAINT pets_customerid_fkey;
+
+ALTER TABLE pets
+ADD CONSTRAINT pets_customerid_fkey
+FOREIGN KEY (customerid) REFERENCES customers (customerid)
+
+----------------------------------------------------------------------------------------------------
+Table Constraints (FOREIGN KEY Constraint)
+----------------------------------------------------------------------------------------------------
+ALTER TABLE suppliers
+ALTER COLUMN homepage SET DEFAULT 'N/A';
+
+ALTER TABLE suppliers
+ALTER COLUMN homepage DROP DEFAULT;
+
+----------------------------------------------------------------------------------------------------
+CTE - Common Table Expressions (WITH Queries)
+----------------------------------------------------------------------------------------------------
+WITH least_ordered_products AS (
+SELECT productid, SUM(od.quantity) AS totalorders
+FROM products
+JOIN order_details AS od USING(productid)
+GROUP BY productid
+ORDER BY totalorders ASC
+LIMIT 2
+)
+
+SELECT DISTINCT (companyname)
+FROM customers
+NATURAL JOIN orders
+NATURAL JOIN order_details
+WHERE productid IN (SELECT productid FROM least_ordered_products)
+
+----------------------------------------------------------------------------------------------------
+CTE - Common Table Expressions (Using Recursion in CTEs)
+----------------------------------------------------------------------------------------------------
+WITH RECURSIVE report_to(firstname, lastname, title, employeeid, reportsto, level) AS (
+SELECT firstname, lastname, title, employeeid, reportsto, 0
+FROM employees
+WHERE employeeid = 218
+UNION ALL
+SELECT manager.firstname, manager.lastname, manager.title, manager.employeeid, manager.reportsto, level+1
+FROM employees as manager
+JOIN report_to ON report_to.reportsto = manager.employeeid
+);
+SELECT * FROM report_to;
+
+----------------------------------------------------------------------------------------------------
+Views (Views - How To Create)
+----------------------------------------------------------------------------------------------------
+CREATE VIEW supplier_order_details AS
+SELECT companyname, suppliers.supplierid
+products.productid, productname,
+order_details.unitprice, quantity, discount,
+orders.*
+
+FROM suppliers
+JOIN products USING(supplierid)
+JOIN order_details USING(productid)
+JOIN orders USING(orderid);
+
+SELECT *
+FROM supplier_order_details
+WHERE supplierid = 5;
+
+----------------------------------------------------------------------------------------------------
+Views (Views - How To Modify)
+----------------------------------------------------------------------------------------------------
+ALTER VIEW supplier_order_details RENAME TO suppliers;
+
+----------------------------------------------------------------------------------------------------
+Views (Deleting Views)
+----------------------------------------------------------------------------------------------------
+DROP VIEW IF EXISTS supplier_orders;
+
+----------------------------------------------------------------------------------------------------
+Conditional Expressions (CASE WHEN)
+----------------------------------------------------------------------------------------------------
+SELECT productname, unitprice,
+CASE WHEN unitprice > 10 THEN 'inexpensive'
+WHEN unitprice >= 10 AND unitprice < 50 THEN 'mid-range'
+WHEN unitprice > 10 THEN 'expensive'
+END AS label
+FROM products
+
+SELECT companyname,
+CASE city WHEN 'New Orleans' THEN 'Big Easy'
+WHEN 'Paris' THEN 'City of Lights'
+ELSE city  
+END
+FROM suppliers
